@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Панель управления автозаводом</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        body { background: #f0f2f5; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .navbar-brand { font-weight: bold; font-size: 1.5rem; }
+        .card { border-radius: 15px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); margin-bottom: 25px; transition: 0.3s; }
+        .card:hover { box-shadow: 0 8px 16px rgba(0,0,0,0.15); }
+        .card-header { background-color: #0d6efd; color: white; border-radius: 15px 15px 0 0 !important; font-weight: bold; }
+        .btn-primary { background-color: #0d6efd; border: none; }
+        .btn-primary:hover { background-color: #0b5ed7; }
+        .negative { color: #dc3545; font-weight: bold; }
+        .table th { background-color: #e9ecef; }
+        .tab-content { background: white; padding: 20px; border-radius: 0 0 15px 15px; border: 1px solid #dee2e6; border-top: none; }
+        .nav-tabs .nav-link { font-weight: 500; color: #495057; }
+        .nav-tabs .nav-link.active { color: #0d6efd; font-weight: bold; }
+        .chart-container { max-width: 100%; overflow-x: auto; margin-bottom: 20px; }
+        .chart-container canvas { max-height: 300px; width: auto; min-width: 600px; }
+        footer { text-align: center; margin-top: 30px; padding: 15px; color: #6c757d; }
+        .pagination-controls { margin-top: 15px; display: flex; align-items: center; gap: 10px; }
+    </style>
+</head>
+<body>
+
+<nav class="navbar navbar-dark bg-dark">
+    <div class="container-fluid">
+        <span class="navbar-brand"><i class="bi bi-car-front-fill"></i> Автозавод</span>
+    </div>
+</nav>
+
+<div class="container mt-4">
+    <ul class="nav nav-tabs" id="mainTab" role="tablist">
+        <li class="nav-item"><button class="nav-link active" id="cars-tab" data-bs-toggle="tab" data-bs-target="#cars" type="button" role="tab">🚗 Автомобили</button></li>
+        <li class="nav-item"><button class="nav-link" id="production-tab" data-bs-toggle="tab" data-bs-target="#production" type="button" role="tab">📊 Производство</button></li>
+        <li class="nav-item"><button class="nav-link" id="equipment-tab" data-bs-toggle="tab" data-bs-target="#equipment" type="button" role="tab">⚙️ Оборудование</button></li>
+        <li class="nav-item"><button class="nav-link" id="stock-tab" data-bs-toggle="tab" data-bs-target="#stock" type="button" role="tab">📦 Склад деталей</button></li>
+        <li class="nav-item"><button class="nav-link" id="suppliers-tab" data-bs-toggle="tab" data-bs-target="#suppliers" type="button" role="tab">🏭 Поставщики</button></li>
+    </ul>
+
+    <div class="tab-content mt-0" id="mainTabContent">
+        <!-- ========== АВТОМОБИЛИ с пагинацией ========== -->
+        <div class="tab-pane fade show active" id="cars" role="tabpanel">
+            <div class="card">
+                <div class="card-header"><i class="bi bi-funnel"></i> Фильтры</div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-3"><label>Модель</label><input type="text" id="carModel" class="form-control" placeholder="Lada Vesta"></div>
+                        <div class="col-md-3"><label>Цвет</label><input type="text" id="carColor" class="form-control" placeholder="Красный, Жёлтый"></div>
+                        <div class="col-md-3"><label>Дата от</label><input type="date" id="carDateFrom" class="form-control"></div>
+                        <div class="col-md-3"><label>Дата до</label><input type="date" id="carDateTo" class="form-control"></div>
+                    </div>
+                    <div class="mt-3">
+                        <button class="btn btn-primary" onclick="resetCarFilters()"><i class="bi bi-search"></i> Применить</button>
+                        <button class="btn btn-secondary" onclick="resetCarFilters(true)"><i class="bi bi-arrow-repeat"></i> Сбросить</button>
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header"><i class="bi bi-table"></i> Список автомобилей</div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover" id="carsTable">
+                            <thead><tr><th>VIN</th><th>Модель</th><th>Цвет</th><th>Дата выпуска</th></tr></thead>
+                            <tbody><tr><td colspan="4" class="text-center"><div class="spinner-border spinner-border-sm text-primary"></div> Загрузка...</td></tr></tbody>
+                        </table>
+                    </div>
+                    <div class="pagination-controls" id="carsPagination">
+                        <button class="btn btn-sm btn-secondary" id="carsPrevBtn" disabled>← Назад</button>
+                        <span id="carsPageInfo">Страница 1</span>
+                        <button class="btn btn-sm btn-secondary" id="carsNextBtn">Вперёд →</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== ПРОИЗВОДСТВО с пагинацией таблицы + график (все данные) ========== -->
+        <div class="tab-pane fade" id="production" role="tabpanel">
+            <div class="card">
+                <div class="card-header"><i class="bi bi-graph-up"></i> Выполнение плана производства</div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-bordered" id="prodTable">
+                            <thead><tr><th>Дата</th><th>План</th><th>Факт</th><th>% выполнения</th></tr></thead>
+                            <tbody><tr><td colspan="4" class="text-center">Загрузка...</td></tr></tbody>
+                        </table>
+                    </div>
+                    <div class="pagination-controls" id="prodPagination">
+                        <button class="btn btn-sm btn-secondary" id="prodPrevBtn" disabled>← Назад</button>
+                        <span id="prodPageInfo">Страница 1</span>
+                        <button class="btn btn-sm btn-secondary" id="prodNextBtn">Вперёд →</button>
+                    </div>
+                    <div class="chart-container mt-4">
+                        <canvas id="prodChart" style="max-height: 300px;"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== ОБОРУДОВАНИЕ (без пагинации) ========== -->
+        <div class="tab-pane fade" id="equipment" role="tabpanel">
+            <div class="card">
+                <div class="card-header"><i class="bi bi-tools"></i> Загрузка оборудования (часы работы)</div>
+                <div class="card-body">
+                    <div class="chart-container"><canvas id="equipChart" style="max-height: 300px;"></canvas></div>
+                    <hr>
+                    <div class="table-responsive">
+                        <table class="table table-sm" id="equipTable">
+                            <thead><tr><th>Станок №</th><th>Название</th><th>Часы работы</th></tr></thead>
+                            <tbody><tr><td colspan="3">Загрузка...</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== СКЛАД ДЕТАЛЕЙ ========== -->
+        <div class="tab-pane fade" id="stock" role="tabpanel">
+            <div class="card">
+                <div class="card-header"><i class="bi bi-box-seam"></i> Остатки деталей на складе</div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover" id="stockTable">
+                            <thead><tr><th>Код</th><th>Название</th><th>Поставлено</th><th>Израсходовано</th><th>Остаток</th></tr></thead>
+                            <tbody><tr><td colspan="5">Загрузка...</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== ПОСТАВЩИКИ ========== -->
+        <div class="tab-pane fade" id="suppliers" role="tabpanel">
+            <div class="card">
+                <div class="card-header"><i class="bi bi-truck"></i> Отчёты по поставщикам</div>
+                <div class="card-body">
+                    <label>Выберите поставщика:</label>
+                    <select id="supplierSelect" class="form-select w-50" onchange="loadSupplierReport()">
+                        <option value="">-- Загрузка списка --</option>
+                    </select>
+                    <div id="supplierReport" class="mt-4"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<footer><hr><small>Курсовая работа по базам данных — Автозавод</small></footer>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    const API_BASE = '/api';
+    // Состояния для пагинации
+    const carsState = { page: 1, limit: 10, total: 0 };
+    const prodState = { page: 1, limit: 10, total: 0 };
+
+    // Вспомогательная функция fetchJSON
+    async function fetchJSON(url, errorMsg) {
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error(`${errorMsg}: ${resp.status}`);
+        return resp.json();
+    }
+
+    // ---------- АВТОМОБИЛИ ----------
+    async function loadCars(page = 1) {
+        carsState.page = page;
+        const model = document.getElementById('carModel').value.trim();
+        const color = document.getElementById('carColor').value.trim();
+        const dateFrom = document.getElementById('carDateFrom').value;
+        const dateTo = document.getElementById('carDateTo').value;
+        let url = `${API_BASE}/cars?limit=${carsState.limit}&offset=${(page-1)*carsState.limit}`;
+        if (model) url += `&model=${encodeURIComponent(model)}`;
+        if (color) url += `&color=${encodeURIComponent(color)}`;
+        if (dateFrom) url += `&date_from=${dateFrom}`;
+        if (dateTo) url += `&date_to=${dateTo}`;
+        try {
+            const result = await fetchJSON(url, 'Ошибка загрузки авто');
+            carsState.total = result.total;
+            const cars = result.data;
+            const tbody = document.querySelector('#carsTable tbody');
+            if (!cars.length) { tbody.innerHTML = '<tr><td colspan="4">Нет данных</td></tr>'; }
+            else {
+                tbody.innerHTML = cars.map(c => `
+                    <tr><td>${c.vin_number}</td><td>${c.model || '—'}</td><td>${c.color}</td><td>${c.production_date ? c.production_date.slice(0,10) : '—'}</td></tr>
+                `).join('');
+            }
+            updatePaginationUI('cars', carsState);
+        } catch(e) { console.error(e); document.querySelector('#carsTable tbody').innerHTML = `<tr><td colspan="4">Ошибка: ${e.message}</td></tr>`; }
+    }
+    function resetCarFilters(fullReset = false) {
+        if (fullReset) {
+            document.getElementById('carModel').value = '';
+            document.getElementById('carColor').value = '';
+            document.getElementById('carDateFrom').value = '';
+            document.getElementById('carDateTo').value = '';
+        }
+        carsState.page = 1;
+        loadCars(1);
+    }
+
+    // ---------- ПРОИЗВОДСТВО (таблица с пагинацией) ----------
+    async function loadProductionTable(page = 1) {
+        prodState.page = page;
+        const offset = (page-1)*prodState.limit;
+        const url = `${API_BASE}/production?limit=${prodState.limit}&offset=${offset}`;
+        try {
+            const result = await fetchJSON(url, 'Ошибка загрузки производства');
+            prodState.total = result.total;
+            const data = result.data;
+            const tbody = document.querySelector('#prodTable tbody');
+            if (!data.length) { tbody.innerHTML = '<tr><td colspan="4">Нет данных</td></tr>'; }
+            else {
+                const formatted = data.map(r => {
+                    const dateStr = new Date(r.production_date).toISOString().slice(0,10);
+                    return `<tr><td>${dateStr}</td><td>${r.planned}</td><td>${r.actual}</td><td>${r.percent_done}%</td></tr>`;
+                }).join('');
+                tbody.innerHTML = formatted;
+            }
+            updatePaginationUI('prod', prodState);
+        } catch(e) { console.error(e); document.querySelector('#prodTable tbody').innerHTML = `<tr><td colspan="4">Ошибка: ${e.message}</td></tr>`; }
+    }
+    // График производства (все данные) – предполагается эндпоинт /production/chart
+    async function loadProductionChart() {
+        try {
+            // Если нет отдельного эндпоинта, можно использовать /production с большим лимитом,
+            // но лучше создать /production/chart на бэке.
+            let data;
+            try {
+                const resp = await fetch(`${API_BASE}/production/chart`);
+                if (!resp.ok) throw new Error('Нет эндпоинта /production/chart');
+                data = await resp.json();
+            } catch(e) {
+                // fallback: запросим с большим лимитом
+                console.warn('Используется fallback: /production с limit=10000');
+                const fallback = await fetchJSON(`${API_BASE}/production?limit=10000&offset=0`, 'Fallback');
+                data = fallback.data;
+            }
+            const dates = data.map(r => new Date(r.production_date).toISOString().slice(0,10));
+            const planned = data.map(r => r.planned);
+            const actual = data.map(r => r.actual);
+            const ctx = document.getElementById('prodChart').getContext('2d');
+            if (window.prodChartInstance) window.prodChartInstance.destroy();
+            window.prodChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: dates,
+                    datasets: [
+                        { label: 'План', data: planned, borderColor: '#0d6efd', fill: false, tension: 0.1 },
+                        { label: 'Факт', data: actual, borderColor: '#198754', fill: false, tension: 0.1 }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: true }
+            });
+        } catch(e) { console.error('График не загружен:', e); }
+    }
+
+    // ---------- ОБОРУДОВАНИЕ (без пагинации) ----------
+    async function loadEquipment() {
+        try {
+            const stats = await fetchJSON(`${API_BASE}/equipment/usage`, 'Ошибка оборудования');
+            const tbody = document.querySelector('#equipTable tbody');
+            if (!stats.length) { tbody.innerHTML = '<tr><td colspan="3">Нет данных</td></tr>'; return; }
+            tbody.innerHTML = stats.map(s => `<tr><td>${s.machine_number}</td><td>${s.name}</td><td>${s.total_hours}</td></tr>`).join('');
+            const ctx = document.getElementById('equipChart').getContext('2d');
+            if (window.equipChartInstance) window.equipChartInstance.destroy();
+            window.equipChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: stats.map(s => `№${s.machine_number}`),
+                    datasets: [{ label: 'Часы работы', data: stats.map(s => s.total_hours), backgroundColor: '#36a2eb' }]
+                },
+                options: { responsive: true, scales: { y: { beginAtZero: true } } }
+            });
+        } catch(e) { console.error(e); }
+    }
+
+    // ---------- СКЛАД ДЕТАЛЕЙ ----------
+    async function loadStock() {
+        try {
+            const stocks = await fetchJSON(`${API_BASE}/parts/stock`, 'Ошибка остатков');
+            const tbody = document.querySelector('#stockTable tbody');
+            if (!stocks.length) { tbody.innerHTML = '<tr><td colspan="5">Нет данных</td></tr>'; return; }
+            tbody.innerHTML = stocks.map(s => `
+                <tr>
+                    <td>${s.part_code}</td><td>${s.name}</td>
+                    <td>${s.supplied}</td><td>${s.consumed}</td>
+                    <td class="${s.balance<0?'negative':''}">${s.balance}</td>
+                </tr>
+            `).join('');
+        } catch(e) { console.error(e); }
+    }
+
+    // ---------- ПОСТАВЩИКИ ----------
+    async function loadSuppliersList() {
+        try {
+            const suppliers = await fetchJSON(`${API_BASE}/suppliers`, 'Ошибка поставщиков');
+            const select = document.getElementById('supplierSelect');
+            if (!suppliers.length) { select.innerHTML = '<option>Нет поставщиков</option>'; return; }
+            select.innerHTML = '<option value="">-- Выберите поставщика --</option>' +
+                suppliers.map(s => `<option value="${s.supplier_ID}">${s.supplier_Name}</option>`).join('');
+        } catch(e) { console.error(e); }
+    }
+    async function loadSupplierReport() {
+        const supplierId = document.getElementById('supplierSelect').value;
+        const reportDiv = document.getElementById('supplierReport');
+        if (!supplierId) { reportDiv.innerHTML = ''; return; }
+        try {
+            const data = await fetchJSON(`${API_BASE}/suppliers/report?supplier_id=${supplierId}`, 'Ошибка отчёта');
+            if (!data.length) { reportDiv.innerHTML = '<div class="alert alert-warning">Нет данных</div>'; return; }
+            const rep = data[0];
+            let html = `<h4>${rep.supplier_Name}</h4>`;
+            html += `<h5>Детали:</h5><table class="table table-sm"><thead><tr><th>Деталь</th><th>Кол-во</th><th>Сумма (₽)</th></tr></thead><tbody>`;
+            rep.parts.forEach(p => { html += `<tr><td>${p.part_name} (${p.part_code})</td><td>${p.total_quantity}</td><td>${p.total_amount.toFixed(2)}</td></tr>`; });
+            html += `</tbody></table><h5>Динамика по месяцам:</h5><table class="table table-sm"><thead><tr><th>Месяц</th><th>Поставок</th><th>Деталей</th><th>Сумма (₽)</th></tr></thead><tbody>`;
+            rep.monthly.forEach(m => { html += `<tr><td>${m.year_month}</td><td>${m.supply_count}</td><td>${m.total_quantity}</td><td>${m.total_amount.toFixed(2)}</td></tr>`; });
+            html += `</tbody></table>`;
+            reportDiv.innerHTML = html;
+        } catch(e) { reportDiv.innerHTML = `<div class="alert alert-danger">Ошибка: ${e.message}</div>`; }
+    }
+
+    // ---------- Обновление кнопок пагинации ----------
+    function updatePaginationUI(prefix, state) {
+        const totalPages = Math.ceil(state.total / state.limit);
+        const prevBtn = document.getElementById(`${prefix}PrevBtn`);
+        const nextBtn = document.getElementById(`${prefix}NextBtn`);
+        const pageSpan = document.getElementById(`${prefix}PageInfo`);
+        if (prevBtn) prevBtn.disabled = (state.page <= 1);
+        if (nextBtn) nextBtn.disabled = (state.page >= totalPages);
+        if (pageSpan) pageSpan.innerText = `Страница ${state.page} из ${totalPages || 1}`;
+    }
+    function prevPage(prefix, loadFunc) {
+        const state = prefix === 'cars' ? carsState : prodState;
+        if (state.page > 1) loadFunc(state.page - 1);
+    }
+    function nextPage(prefix, loadFunc) {
+        const state = prefix === 'cars' ? carsState : prodState;
+        const totalPages = Math.ceil(state.total / state.limit);
+        if (state.page < totalPages) loadFunc(state.page + 1);
+    }
+
+    // ---------- Инициализация при загрузке ----------
+    window.onload = () => {
+        loadCars(1);
+        loadProductionTable(1);
+        loadProductionChart();
+        loadEquipment();
+        loadStock();
+        loadSuppliersList();
+
+        document.getElementById('carsPrevBtn').onclick = () => prevPage('cars', loadCars);
+        document.getElementById('carsNextBtn').onclick = () => nextPage('cars', loadCars);
+        document.getElementById('prodPrevBtn').onclick = () => prevPage('prod', loadProductionTable);
+        document.getElementById('prodNextBtn').onclick = () => nextPage('prod', loadProductionTable);
+    };
+</script>
+</body>
+</html>
